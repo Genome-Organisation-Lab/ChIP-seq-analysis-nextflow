@@ -2,8 +2,8 @@
 /*
 * Name:         callPeaks.nf
 *
-* Description:  Call peaks for ChIP-seq data, tries to use a methodology reltivly close to the
-*               already established REMAP pipeline.
+* Description:  Processes ChIP-seq data and performs peak-calling with macs2, approximating the 
+*		        established REMAP pipeline (https://doi.org/10.1093/nar/gkab996).
 *
 * Input:        A reference genome to align to in FASTA format and one or more directories containing
 *               raw ChIP-seq reads in FASTQ format.
