@@ -3,59 +3,65 @@
 # Make sure that the shell script stops running if it hits an error
 set -e
 
+# Description:
+# Shell script to execute the nextflow pipeline for multiple replicates with a single input control.
+
 # Usage: 
-# $ ./run_analysis.sh ./path/to/genotype/dirs/ SAMPLE_1,SAMPLE_2,SAMPLE_3
+# $ ./run_analysis.sh ./path/to/genome.fa single/paired sample_SRR_code [control_SRR_code]
+# sample SRR codes should a comma-separated list with no spaces
+# control SRR code is optional
 
-function get_data { fasterq-dump $1 -O $1; }
+genome=$1
+sequencing_type=$2
 
-echo "Is a control included - yes or no?"
-read control_included
+# split the sample list into an array
+allSamples=$3
+IFS=',' read -ra sampleList <<< "$allSamples"
 
-echo "Sequencing type - single or paired?"
-read sequencing_type
+control=$4
 
-echo "Provide sample datasets (SRR code)"
-read -a sample_data
-input_sample_data=$(echo "${sample_data[*]}" | tr ' ' ,)
-
-if [ "$control_included" = "yes" ];
-then
-	echo "Provide control datasets (SRR code)";
-	read -a control_data;
-	input_control_data=$(echo "${control_data[*]}" | tr ' ' ,)
-fi
-
+# Ensure python script is executable
 chmod +x bin/getFastaLength.py
 
-if [ "$control_included" = "no" ];
+# Create function for downloading fastq files
+function get_data { fasterq-dump $1 -O $1; }
+
+# Run analysis
+if [[ -z "$control" ]];
 then
 	if [ "$sequencing_type" = "single" ];
 	then
-		for file in "${sample_data[@]}"; do if [ ! -f "$file" ]; then get_data "$file"; fi; done;
-		nextflow run callPeaks.nf --genome-fasta "Genomes/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa" --chip-seq-fastq "$input_sample_data" --use-rmdup;
+		for sample in "${sampleList[@]}"; do if [ ! -f "$sample" ]; then get_data "$sample"; fi; done;
+		nextflow run callPeaks.nf --genome-fasta  "${genome}" --chip-seq-fastq "$allSamples" --use-rmdup;
 	elif [ "$sequencing_type" = "paired" ];
 	then
-		for file in "${sample_data[@]}"; do if [ ! -f "$file" ]; then get_data "$file"; fi; done;
-		nextflow run callPeaks.nf --genome-fasta "Genomes/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa" --chip-seq-fastq "$input_sample_data" --paired --use-rmdup;
+		for sample in "${sampleList[@]}"; do if [ ! -f "$sample" ]; then get_data "$sample"; fi; done;
+		nextflow run callPeaks.nf --genome-fasta  "${genome}" --chip-seq-fastq "$allSamples" --paired --use-rmdup;
 	fi
-elif [ "$control_included" = "yes" ];
+elif if [[ -n "$control" ]];
 then
 	if [ "$sequencing_type" = "single" ];
 	then
-		for file in "${sample_data[@]}" "${control_data[@]}"; do if [ ! -f "$file" ]; then get_data "$file"; fi; done;
-		nextflow run callPeaks.nf --genome-fasta "Genomes/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa" --chip-seq-fastq "$input_sample_data" --control-fastq "$input_control_data" --use-rmdup;
+		for sample in "${sampleList[@]}" "$control"; do if [ ! -f "$sample" ]; then get_data "$sample"; fi; done;
+		nextflow run callPeaks.nf --genome-fasta  "${genome}" --chip-seq-fastq "$allSamples" --control-fastq "$control" --use-rmdup;
 	elif [ "$sequencing_type" = "paired" ];
 	then
-		for file in "${sample_data[@]}" "${control_data[@]}"; do if [ ! -f "$file" ]; then get_data "$file"; fi; done;
-		nextflow run callPeaks.nf --genome-fasta "Genomes/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa" --chip-seq-fastq "$input_sample_data" --control-fastq "$input_control_data" --paired --use-rmdup;
+		for sample in "${sampleList[@]}" "$control"; do if [ ! -f "$sample" ]; then get_data "$sample"; fi; done;
+		nextflow run callPeaks.nf --genome-fasta  "${genome}" --chip-seq-fastq "$allSamples" --control-fastq "$control" --paired --use-rmdup;
 	fi
 fi
 
-
+# Remove fastq files (optional)
 rm -rf SRR*;
+
+# Remove temporary files.
 cd work; rm -rf *; cd ..;
+
+# Remove unneccessary files (optional)
 cd output;
 rm -rf SRR*;
-mv mergedBroadPeaks.bed "${sample_data[0]}"mergedBroadPeaks.bed;
-mv mergedNarrowPeaks.bed "${sample_data[0]}"mergedNarrowPeaks.bed;
+
+# Rename output peak files.
+mv mergedBroadPeaks.bed "${sampleList[0]}"mergedBroadPeaks.bed;
+mv mergedNarrowPeaks.bed "${sampleList[0]}"mergedNarrowPeaks.bed;
 cd ..;
